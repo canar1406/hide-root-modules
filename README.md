@@ -1,71 +1,38 @@
-# 🛡️ Hide Root & Bypass Suite (LSPosed / Xposed Modules)
+# 🛡️ Hide DevMode & Root Bypass (`v1.1.0`)
 
-Bộ công cụ **LSPosed / Xposed Modules** chuyên dụng dành cho Android (**Android 8 – Android 15 / Xiaomi HyperOS**), giúp ẩn **Tùy chọn nhà phát triển (Developer Options)**, **Gỡ lỗi USB/Wi-Fi (ADB)**, **Vị trí giả lập (Mock Location)** và **Mở khóa chụp ảnh / quay màn hình (`FLAG_SECURE`)** ở tầng **System Framework (`system_server`)** mà **không cần tiêm Xposed trực tiếp vào ứng dụng ngân hàng hay VNeID**.
-
----
-
-## 📦 Danh sách Module trong Bộ Công Cụ
-
-### 1. 🛡️ [`HideDevMode.apk`](./HideDevMode.apk) (`v1.1.0` — `com.heavietnam.hidedevmode`)
-Ẩn triệt để trạng thái Developer Options, USB/Wi-Fi Debugging và Mock Location trước mọi ứng dụng kiểm tra bảo mật gắt (**VCB Digibank, Techcombank, MB Bank, VNeID, MoMo, vRace...**).
-
-* **Cơ chế Hook 2 tầng**:
-  1. **Tầng Khung Hệ Thống (`System Framework` / `SettingsProvider`)**:
-     * Can thiệp trực tiếp vào `com.android.providers.settings.SettingsProvider.call("GET_global" | "GET_secure" | "GET_system", ...)` và `query(...)` ngay trong tiến trình `system_server`.
-     * Tự động kiểm tra `Binder.getCallingUid()`: Chỉ trả về `"0"` đối với các ứng dụng người dùng (`UID >= 10000`), giữ nguyên giá trị thật cho `System (UID 1000)`, ứng dụng **Cài đặt (`com.android.settings`)** và **ADB Shell (`UID 2000`)**.
-     * **Ưu điểm quyết định**: Các ứng dụng ngân hàng (như VCB Digibank, Techcombank, MB Bank) và VNeID nhận giá trị `development_settings_enabled = 0`, `adb_enabled = 0`, `adb_wifi_enabled = 0`, `mock_location = 0` mà **KHÔNG cần tích các app ngân hàng đó trong LSPosed** $\rightarrow$ tuyệt đối không bị phát hiện Xposed hook trong tiến trình app!
-  2. **Tầng Ứng Dụng (`App Scope`)**:
-     * Hook `Settings.Global`, `Settings.Secure`, `Settings.System` (`getInt`, `getString`, `getLong`, `getFloat`).
-     * Hook `Location.isFromMockProvider()` & `Location.isMock()` (Android 12+ / SDK 31+) $\rightarrow$ luôn trả về `false`, tự động xóa cờ `mockLocation` trong `Location.getExtras()`.
-     * Giả lập `android.os.SystemProperties` (`ro.debuggable -> 0`, `ro.secure -> 1`, `sys.usb.state / sys.usb.config -> mtp`, `init.svc.adbd -> stopped`, `service.adb.tcp.port -> -1`, `persist.adb.tls_server.enable -> 0`).
-     * Hook `Debug.isDebuggerConnected()` & `Debug.waitingForDebugger()` $\rightarrow$ `false`.
+Module **LSPosed / Xposed** chuyên dụng dành cho Android (**Android 8 – Android 15 / Xiaomi HyperOS**), giúp ẩn triệt để **Tùy chọn nhà phát triển (Developer Options)**, **Gỡ lỗi USB/Wi-Fi (ADB)** và **Vị trí giả lập (Mock Location)** ở tầng **System Framework (`system_server`)** mà **không cần tiêm Xposed trực tiếp vào ứng dụng ngân hàng hay VNeID**.
 
 ---
 
-### 2. 📸 [`SpoofScreenshot.apk`](./SpoofScreenshot.apk) (`v1.0.0` — `com.heavietnam.spoofscreenshot`)
-Mở khóa chụp ảnh màn hình và quay màn hình trên **mọi ứng dụng chặn chụp màn hình**, đồng thời vô hiệu hóa cơ chế phát hiện chụp màn hình trên Android 14/15 & Xiaomi HyperOS.
+## ✨ Tính năng của [`HideDevMode.apk`](./HideDevMode.apk) (`v1.1.0` — `com.heavietnam.hidedevmode`)
 
-* **Cơ chế Hook toàn diện**:
-  1. **Tầng Khung Hệ Thống (`system_server` — `android`)**:
-     * `com.android.server.wm.WindowState.isSecureLocked()` $\rightarrow$ luôn trả về `false`.
-     * `com.android.server.wm.WindowManagerServiceImpl.notAllowCaptureDisplay()` *(cơ chế chặn riêng của Xiaomi MIUI / HyperOS)* $\rightarrow$ luôn trả về `false`.
-     * `com.android.server.wm.WindowSurfaceController` (Constructor & `setSecure`) $\rightarrow$ xóa cờ `SurfaceControl.SECURE` (`0x80`) và ép `false`.
-     * `com.android.server.wm.WindowManagerService.captureDisplay()` $\rightarrow$ ép `mCaptureSecureLayers = true` cho mọi `CaptureArgs`.
-     * `com.android.server.devicepolicy.DevicePolicyManagerService.getScreenCaptureDisabled()` $\rightarrow$ luôn trả về `false`.
-  2. **Tầng Chặn Phát Hiện Chụp Màn Hình (`Anti-Screenshot Detection`)**:
-     * `com.android.server.wm.ActivityTaskManagerService.registerScreenCaptureObserver()` (Android 14/15) $\rightarrow$ vô hiệu hóa (`no-op`).
-     * `com.android.server.wm.WindowManagerService.notifyScreenshotListeners()` (MIUI / AOSP) $\rightarrow$ trả về danh sách rỗng `Collections.emptyList()`.
-     * `android.app.Activity.registerScreenCaptureCallback()` (Android 14/15) $\rightarrow$ vô hiệu hóa (`no-op`).
-  3. **Tầng Framework / Ứng Dụng (`SystemUI`, `MIUI Screenshot`, `MIUI ScreenRecorder` & App Scope)**:
-     * `android.window.ScreenCapture$CaptureArgs` & `Builder` $\rightarrow$ luôn ép `mCaptureSecureLayers = true`.
-     * `android.view.SurfaceControl$Builder` & `SurfaceControl$Transaction` (`setSecure`, `setFlags`) $\rightarrow$ xóa bit `0x80` (`SECURE`).
-     * `android.view.Window.setFlags()` / `addFlags()` & `WindowManagerImpl` / `WindowManagerGlobal` (`addView`, `updateViewLayout`) $\rightarrow$ xóa cờ `WindowManager.LayoutParams.FLAG_SECURE` (`0x2000`).
-     * `android.view.SurfaceView.setSecure(boolean)` $\rightarrow$ luôn ép `false`.
-     * `android.app.Activity.setRecentsScreenshotEnabled(boolean)` $\rightarrow$ luôn ép `true` (hiển thị ảnh xem trước trong màn hình Đa nhiệm).
+1. **Tầng Khung Hệ Thống (`System Framework` / `SettingsProvider`)**:
+   * Can thiệp trực tiếp vào `com.android.providers.settings.SettingsProvider.call("GET_global" | "GET_secure" | "GET_system", ...)` và `query(...)` ngay trong tiến trình `system_server`.
+   * Tự động kiểm tra `Binder.getCallingUid()`: Chỉ trả về `"0"` đối với các ứng dụng người dùng (`UID >= 10000`), giữ nguyên giá trị thật cho `System (UID 1000)`, ứng dụng **Cài đặt (`com.android.settings`)** và **ADB Shell (`UID 2000`)**.
+   * **Ưu điểm quyết định**: Các ứng dụng ngân hàng có chống hook gắt (**VCB Digibank, Techcombank, MB Bank...**) và **VNeID** nhận giá trị `development_settings_enabled = 0`, `adb_enabled = 0`, `adb_wifi_enabled = 0`, `mock_location = 0` mà **KHÔNG cần tích các app ngân hàng đó trong LSPosed** $\rightarrow$ tuyệt đối không bị phát hiện Xposed hook trong tiến trình app!
+2. **Tầng Ứng Dụng (`App Scope`)**:
+   * Hook `Settings.Global`, `Settings.Secure`, `Settings.System` (`getInt`, `getString`, `getLong`, `getFloat`).
+   * Hook `Location.isFromMockProvider()` & `Location.isMock()` (Android 12+ / SDK 31+) $\rightarrow$ luôn trả về `false`, tự động xóa cờ `mockLocation` trong `Location.getExtras()`.
+   * Giả lập `android.os.SystemProperties` (`ro.debuggable -> 0`, `ro.secure -> 1`, `sys.usb.state / sys.usb.config -> mtp`, `init.svc.adbd -> stopped`, `service.adb.tcp.port -> -1`, `persist.adb.tls_server.enable -> 0`).
+   * Hook `Debug.isDebuggerConnected()` & `Debug.waitingForDebugger()` $\rightarrow$ `false`.
 
 ---
 
-## 🚀 Hướng dẫn Cài đặt & Cấu hình Chuẩn (VNeID + Ngân hàng + Chụp màn hình)
+## 🚀 Hướng dẫn Cài đặt & Cấu hình Chuẩn (VNeID + Ngân hàng)
 
-### Bước 1: Cài đặt 2 file APK
+### Bước 1: Cài đặt APK
 ```bash
 adb install -r HideDevMode.apk
-adb install -r SpoofScreenshot.apk
 ```
 
 ### Bước 2: Bật trong LSPosed
-1. Mở **LSPosed Manager** $\rightarrow$ mục **Mô-đun (Modules)**:
-   * **Hide DevMode**: Bật mô-đun, chỉ cần tích **Khung hệ thống (`system`)** *(không tích Cài đặt `com.android.settings`, không tích app ngân hàng)*.
-   * **Spoof Screenshot**: Bật mô-đun, tích chọn:
-     * ✅ **Framework Hệ thống (`system`)**
-     * ✅ **Giao diện người dùng hệ thống (`com.android.systemui`)**
-     * ✅ **Chụp ảnh màn hình (`com.miui.screenshot`)**
-     * ✅ **Quay phim Màn hình (`com.miui.screenrecorder`)**
-2. **Khởi động lại máy (Reboot) 1 lần** để hook trong `system_server` có hiệu lực toàn cục.
+1. Mở **LSPosed Manager** $\rightarrow$ mục **Mô-đun (Modules)** $\rightarrow$ bật **Hide DevMode**.
+2. Chỉ cần tích **Khung hệ thống (`system`)** *(không tích Cài đặt `com.android.settings`, không cần tích app ngân hàng)*.
+3. **Khởi động lại máy (Reboot) 1 lần** để hook trong `system_server` có hiệu lực toàn cục.
 
 ### Bước 3: Ẩn danh sách ứng dụng bằng HMA-OSS (`Hide My Applist`)
 1. Mở **HMA-OSS (`com.tsng.hidemyapplist`)** $\rightarrow$ vào **Template (`hide root`)**:
-   * Đảm bảo đã tích ẩn các gói: `com.rifsxd.ksunext`, `org.lsposed.manager`, `com.tsng.hidemyapplist`, `com.heavietnam.hidedevmode`, `com.heavietnam.spoofscreenshot`, `com.smoothrunner.gps`...
+   * Đảm bảo đã tích ẩn các gói: `com.rifsxd.ksunext`, `org.lsposed.manager`, `com.tsng.hidemyapplist`, `com.heavietnam.hidedevmode`, `com.smoothrunner.gps`...
 2. Trong mục **Quản lý ứng dụng (App Manage)** của HMA-OSS:
    * Bật ẩn (`Enable Hide`) với template `hide root` cho **VNeID (`com.vnid`)** và toàn bộ các ứng dụng ngân hàng (**VCB Digibank, Techcombank, MB Bank, Viettel Money...**).
 
@@ -86,27 +53,16 @@ adb install -r SpoofScreenshot.apk
 
 ```text
 ├── HideDevMode.apk                       # APK cài đặt ngay của module Hide DevMode (v1.1.0)
-├── SpoofScreenshot.apk                   # APK cài đặt ngay của module Spoof Screenshot (v1.0.0)
 ├── README.md                             # Tài liệu hướng dẫn chi tiết
-├── HideDevModeAndroid/                   # Mã nguồn module Hide DevMode
-│   └── app/
-│       ├── libs/xposed-api.jar           # Thư viện stub Xposed API 82
-│       └── src/main/
-│           ├── AndroidManifest.xml
-│           ├── assets/xposed_init
-│           ├── res/values/arrays.xml
-│           └── java/com/heavietnam/hidedevmode/
-│               ├── HideDevModeHook.java
-│               └── MainActivity.java
-└── SpoofScreenshotAndroid/               # Mã nguồn module Spoof Screenshot
+└── HideDevModeAndroid/                   # Mã nguồn module Hide DevMode
     └── app/
         ├── libs/xposed-api.jar           # Thư viện stub Xposed API 82
         └── src/main/
             ├── AndroidManifest.xml
             ├── assets/xposed_init
             ├── res/values/arrays.xml
-            └── java/com/heavietnam/spoofscreenshot/
-                ├── SpoofScreenshotHook.java
+            └── java/com/heavietnam/hidedevmode/
+                ├── HideDevModeHook.java
                 └── MainActivity.java
 ```
 
