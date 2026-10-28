@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope">
+        <item>android</item>
+        <item>fpt.vne.vrace</item>
+        <item>com.vnid</item>
+        <item>com.heavietnam.hidedevmode</item>
+    </string-array>
+</resources>

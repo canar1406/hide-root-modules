@@ -1,0 +1,6 @@
+# Build outputs & signing keys
+*/app/build/
+*.idsig
+*.keystore
+*.jks
+.DS_Store
